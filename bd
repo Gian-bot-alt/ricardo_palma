@@ -1,0 +1,95 @@
+-- Crear la base de datos si no existe
+CREATE DATABASE IF NOT EXISTS colegio_ricardo_palma;
+USE colegio_ricardo_palma;
+
+-- Crear la tabla de roles para permitir más flexibilidad
+CREATE TABLE IF NOT EXISTS roles (
+    id INT(11) AUTO_INCREMENT PRIMARY KEY,
+    nombre VARCHAR(50) NOT NULL UNIQUE
+);
+
+-- Insertar roles con los IDs específicos (admin = 1, empleado nivel 2 = 2, empleado nivel 1 = 3)
+INSERT INTO roles (id, nombre) VALUES 
+    (1, 'admin'),
+    (2, 'empleado nivel 2'),
+    (3, 'empleado nivel 1');
+
+-- Crear la tabla de usuarios con una relación a la tabla de roles
+CREATE TABLE IF NOT EXISTS usuarios (
+    id INT(11) AUTO_INCREMENT PRIMARY KEY,
+    nombre VARCHAR(50) NOT NULL,
+    correo VARCHAR(100) NOT NULL UNIQUE,
+    contrasena VARCHAR(255) NOT NULL,
+    rol_id INT(11),
+    FOREIGN KEY (rol_id) REFERENCES roles(id) ON DELETE SET NULL
+);
+
+-- Crear la tabla de publicaciones para incluir la ruta de la imagen
+CREATE TABLE IF NOT EXISTS publicaciones (
+    id INT(11) AUTO_INCREMENT PRIMARY KEY,
+    titulo VARCHAR(255) NOT NULL,
+    contenido TEXT NOT NULL,
+    imagen_url VARCHAR(255),  -- Aquí se almacena la ruta o URL de la imagen
+    autor_id INT(11),
+    fecha_publicacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (autor_id) REFERENCES usuarios(id) ON DELETE SET NULL
+);
+
+-- Crear la tabla de noticias con estructura similar a la de publicaciones
+CREATE TABLE IF NOT EXISTS noticias (
+    id INT(11) AUTO_INCREMENT PRIMARY KEY,
+    titulo VARCHAR(255) NOT NULL,
+    contenido TEXT NOT NULL,
+    imagen_url VARCHAR(255),  -- Aquí se almacena la ruta o URL de la imagen
+    autor_id INT(11),
+    fecha_publicacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (autor_id) REFERENCES usuarios(id) ON DELETE SET NULL
+);
+
+-- Crear la tabla de configuración del sitio web con campos adicionales
+CREATE TABLE IF NOT EXISTS configuracion (
+    id INT(11) AUTO_INCREMENT PRIMARY KEY,
+    nombre_sitio VARCHAR(100) NOT NULL,
+    descripcion TEXT,
+    logo_url VARCHAR(255),   -- Aquí se almacena la ruta o URL del logo
+    telefono VARCHAR(20),
+    email VARCHAR(100),
+    facebook_url VARCHAR(255),
+    twitter_url VARCHAR(255)
+);
+
+-- Insertar el usuario administrador con contraseña hasheada usando bcrypt
+INSERT INTO usuarios (nombre, correo, contrasena, rol_id)
+VALUES ('admin', 'admin@example.com', '$2a$12$C6UzMDM.H6dfI/f/IKxe1eeYb03TZbWJnckqqRpK7cofDI/vQ1Gq.', 1); -- Contraseña "admin" hasheada
+
+-- Agregar un disparador para asegurar que solo los administradores puedan crear nuevos usuarios
+DELIMITER //
+CREATE TRIGGER before_insert_usuarios
+BEFORE INSERT ON usuarios
+FOR EACH ROW
+BEGIN
+    DECLARE admin_count INT;
+    DECLARE current_user_role_id INT;
+
+    -- Usar variable de sesión para obtener el rol del usuario actual
+    SELECT rol_id INTO current_user_role_id FROM usuarios WHERE id = @current_user_id;
+
+    -- Contar cuántos administradores existen
+    SELECT COUNT(*) INTO admin_count FROM usuarios WHERE rol_id = 1;
+
+    -- Permitir la creación de nuevos usuarios solo si es un administrador quien lo intenta
+    IF admin_count > 0 AND current_user_role_id != 1 THEN
+        SIGNAL SQLSTATE '45000' 
+        SET MESSAGE_TEXT = 'Solo un administrador puede crear nuevos usuarios.';
+    END IF;
+END//
+DELIMITER ;
+
+-- Crear tabla de auditoría para registrar cambios importantes (opcional)
+CREATE TABLE IF NOT EXISTS auditoria (
+    id INT(11) AUTO_INCREMENT PRIMARY KEY,
+    accion VARCHAR(100) NOT NULL,
+    usuario_id INT(11),
+    fecha TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE CASCADE
+);
